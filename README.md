@@ -1,4 +1,6 @@
-# LinkedIn Lead Harvester
+# LinkedIn Outreach Engine
+
+Chrome extension package: **LinkedIn Lead Harvester**.
 
 Automated lead extraction from LinkedIn posts. Save engagers to Google Sheets and generate personalized outreach messages.
 
@@ -38,7 +40,7 @@ Automated lead extraction from LinkedIn posts. Save engagers to Google Sheets an
 ## 📁 Project Structure
 
 ```
-linkedin-lead-harvester/
+Linkedin-Outreach-Engine/
 ├── manifest.json       # Extension config
 ├── background.js       # API calls
 ├── content.js          # DOM scraping
