@@ -1,0 +1,393 @@
+/* Popup Styles - Tabbed Interface */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 360px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f8f9fa;
+}
+
+.popup-container {
+  padding: 0;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #0a66c2 0%, #004182 100%);
+  color: white;
+}
+
+.header h1 {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.version {
+  font-size: 10px;
+  opacity: 0.8;
+  background: rgba(255,255,255,0.2);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.tab {
+  flex: 1;
+  padding: 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  background: #f5f5f5;
+}
+
+.tab.active {
+  color: #0a66c2;
+  border-bottom-color: #0a66c2;
+  background: #fff;
+}
+
+/* Tab Content */
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* Sections */
+section {
+  padding: 14px 20px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+section h2 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+/* Input Groups */
+.input-group {
+  margin-bottom: 12px;
+}
+
+.input-group label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: #555;
+  margin-bottom: 4px;
+}
+
+.input-group input,
+.input-group select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.input-group input:focus,
+.input-group select:focus {
+  border-color: #0a66c2;
+}
+
+.input-group small {
+  display: block;
+  font-size: 10px;
+  color: #888;
+  margin-top: 3px;
+}
+
+.input-group.small {
+  flex: 1;
+}
+
+.input-row {
+  display: flex;
+  gap: 12px;
+}
+
+/* Toggle Switch */
+.toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.toggle {
+  position: relative;
+  width: 44px;
+  height: 22px;
+}
+
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .3s;
+  border-radius: 22px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #0a66c2;
+}
+
+input:checked + .slider:before {
+  transform: translateX(22px);
+}
+
+/* Buttons */
+.btn-primary {
+  width: 100%;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #0a66c2 0%, #004182 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #004182 0%, #00294d 100%);
+}
+
+.btn-secondary {
+  width: 100%;
+  padding: 9px 14px;
+  background: white;
+  color: #0a66c2;
+  border: 1px solid #0a66c2;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 8px;
+}
+
+.btn-secondary:hover {
+  background: #f0f7ff;
+}
+
+.btn-success {
+  width: 100%;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 10px;
+}
+
+.btn-success:hover {
+  background: linear-gradient(135deg, #1e7e34 0%, #155724 100%);
+}
+
+.btn-danger {
+  width: 100%;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 10px;
+}
+
+.btn-danger:hover {
+  background: linear-gradient(135deg, #c82333 0%, #a71d2a 100%);
+}
+
+/* Status Box */
+.status-box {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: #e8f4fd;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 12px;
+  color: #0a66c2;
+}
+
+.status-box.running {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-box.success {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-box.stopped {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.stat-item {
+  text-align: center;
+  padding: 10px 6px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.stat-value {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0a66c2;
+}
+
+.stat-label {
+  display: block;
+  font-size: 9px;
+  color: #666;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* Footer */
+.footer {
+  padding: 10px 20px;
+  text-align: center;
+  border-bottom: none;
+}
+
+.footer p {
+  font-size: 10px;
+  color: #888;
+}
+
+/* Auto-send section */
+.autosend-section {
+  background: #fafbfc;
+}
+
+.safety-note {
+  display: block;
+  color: #856404;
+  background: #fff3cd;
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  font-size: 10px;
+}
+
+/* Settings section */
+.settings-desc {
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 12px;
+}
+
+/* Info section */
+.info-section {
+  background: #f8f9fa;
+}
+
+.how-to-list {
+  list-style: none;
+  padding: 0;
+}
+
+.how-to-list li {
+  font-size: 12px;
+  color: #555;
+  padding: 6px 0;
+  border-bottom: 1px solid #eee;
+  padding-left: 20px;
+  position: relative;
+}
+
+.how-to-list li:last-child {
+  border-bottom: none;
+}
+
+.how-to-list li::before {
+  content: counter(list-item);
+  position: absolute;
+  left: 0;
+  color: #0a66c2;
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.how-to-list {
+  counter-reset: list-item;
+}
+
+.how-to-list li {
+  counter-increment: list-item;
+}
