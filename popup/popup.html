@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <title>LinkedIn Lead Harvester</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+  <div class="popup-container">
+    <header class="header">
+      <h1>🎯 Lead Harvester</h1>
+      <span class="version">v1.2.7</span>
+    </header>
+
+    <!-- TABS -->
+    <div class="tabs">
+      <button class="tab active" data-tab="dashboard">Dashboard</button>
+      <button class="tab" data-tab="settings">Settings</button>
+    </div>
+
+    <!-- DASHBOARD TAB -->
+    <div id="dashboard" class="tab-content active">
+
+      <!-- AUTO-SEND SECTION -->
+      <section class="autosend-section">
+        <h2>🤖 Auto-Send</h2>
+        <small class="safety-note">⚠️ Safe mode: 3-7 min delays, business hours only</small>
+
+        <div class="toggle-group">
+          <label class="toggle">
+            <input type="checkbox" id="autoSendEnabled">
+            <span class="slider"></span>
+          </label>
+          <span>Enable Auto-Send</span>
+        </div>
+
+        <div class="input-row">
+          <div class="input-group small">
+            <label for="dailyLimit">Daily Limit (max 25)</label>
+            <input type="number" id="dailyLimit" value="25" min="1" max="25">
+          </div>
+          <div class="input-group small">
+            <label for="sendTime">Send Time</label>
+            <input type="time" id="sendTime" value="10:00">
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label for="campaignSelect">Campaign</label>
+          <select id="campaignSelect">
+            <option value="">Select a campaign...</option>
+          </select>
+        </div>
+
+        <button id="startAutoSend" class="btn-success">▶️ Start Auto-Send</button>
+        <button id="stopAutoSend" class="btn-danger" style="display:none;">⏹️ Stop Auto-Send</button>
+
+        <div id="autoSendStatus" class="status-box" style="display:none;">
+          <span id="statusText">Not running</span>
+        </div>
+      </section>
+
+      <!-- STATS SECTION -->
+      <section class="stats-section">
+        <h2>📊 Today's Stats</h2>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-value" id="extractedCount">0</span>
+            <span class="stat-label">Extracted</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value" id="sentCount">0</span>
+            <span class="stat-label">Sent Today</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value" id="pendingCount">0</span>
+            <span class="stat-label">Pending</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- QUICK ACTIONS -->
+      <section class="actions-section">
+        <button id="openSheet" class="btn-secondary">
+          📄 Open Google Sheet
+        </button>
+        <button id="sendNow" class="btn-secondary">
+          🚀 Send 1 Now
+        </button>
+      </section>
+
+      <footer class="footer">
+        <p>Go to a LinkedIn post and click "Extract Leads"</p>
+      </footer>
+    </div>
+
+    <!-- SETTINGS TAB -->
+    <div id="settings" class="tab-content">
+      <section class="settings-section">
+        <h2>🔑 API Configuration</h2>
+        <p class="settings-desc">Configure these once to get started</p>
+
+        <div class="input-group">
+          <label for="spreadsheetId">Google Sheet ID</label>
+          <input type="text" id="spreadsheetId" placeholder="1BxiMVs0XRA5nFMdKvBd...">
+          <small>From your Google Sheet URL</small>
+        </div>
+
+        <div class="input-group">
+          <label for="openaiApiKey">OpenAI API Key</label>
+          <input type="password" id="openaiApiKey" placeholder="sk-...">
+          <small>For generating personalized messages</small>
+        </div>
+
+        <button id="saveSettings" class="btn-primary">💾 Save Settings</button>
+
+        <div id="settingsStatus" class="status-box success" style="display:none;">
+          ✓ Settings saved!
+        </div>
+      </section>
+
+      <section class="info-section">
+        <h2>ℹ️ How to Use</h2>
+        <ol class="how-to-list">
+          <li>Go to a LinkedIn post with engagers</li>
+          <li>Click "🎯 Extract Leads" button</li>
+          <li>Click "Generate & Save" to save to Sheet</li>
+          <li>Enable Auto-Send to send requests automatically</li>
+        </ol>
+      </section>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+
+</html>
