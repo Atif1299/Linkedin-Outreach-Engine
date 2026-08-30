@@ -1,0 +1,26 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+*.code-workspace
+
+# Secrets / local env (never commit)
+.env
+.env.*
+!.env.example
+*.pem
+credentials.json
+client_secret*.json
+
+# Logs / temp
+*.log
+npm-debug.log*
+tmp/
+temp/
+
+# Node (if added later)
+node_modules/
+dist/
+build/
