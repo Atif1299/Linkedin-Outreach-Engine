@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "LinkedIn Lead Harvester",
+  "version": "1.2.8",
+  "description": "Extract leads from LinkedIn post engagers, save to Google Sheets, and auto-send connection requests",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "identity",
+    "alarms",
+    "tabs",
+    "scripting",
+    "windows"
+  ],
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "https://sheets.googleapis.com/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.linkedin.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ]
+    }
+  ],
+  "oauth2": {
+    "client_id": "823333525467-ge6k2jvenrhmmjrhl9q6jnk8uptj4s56.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/spreadsheets"
+    ]
+  }
+}
