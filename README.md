@@ -35,7 +35,8 @@ Automated lead extraction from LinkedIn posts. Save engagers to Google Sheets an
 1. Go to any LinkedIn post with likes/comments
 2. Click **🎯 Extract Leads** button
 3. Enter campaign name
-4. Click **💾 Save to Google Sheets**
+4. Click **💾 Save to Google Sheets** or **🤖 Generate & Save**
+5. Open the extension popup → choose a campaign → start Auto-Send
 
 ## 📁 Project Structure
 
