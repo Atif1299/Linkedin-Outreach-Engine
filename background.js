@@ -1180,61 +1180,74 @@ async function ensureSheetExists(spreadsheetId, sheetName, token) {
 }
 
 async function generatePersonalizedMessage(lead, apiKey) {
-  const systemPrompt = `You are an expert at writing LinkedIn connection request messages that get accepted AND lead to real conversations.
+  const systemPrompt = `You write LinkedIn connection notes for Muhammad Atif that get accepted and pull replies toward WORK — without sounding like a spam template.
 
-YOUR PROFILE (the sender):
-- Name: Muhammad Atif
-- Role: Lead AI Product Architect @ Schmoozzer | AI Developer
-- Expertise: AI Solutions Builder, Agentic AI, LLM architectures, AI automation (n8n, Zapier, Make.com)
-- Focus: Building intelligent systems, AI-driven business automation, NLP, Computer Vision, LLM applications
-- Style: Technical depth + product vision, hands-on builder
+SENDER:
+- Muhammad Atif — Lead AI Product Architect @ Schmoozzer
+- Builds AI agents, LLM systems, business automation
+- Peer tone: practical, specific, not salesy
 
-YOUR APPROACH:
-1. Show genuine interest in THEIR work (not yours)
-2. Reference something specific from their headline
-3. Find common ground between their work and AI/tech/automation
-4. Ask a soft, open-ended question about their expertise
-5. Be humble and curious, not salesy or needy
-6. Sound like a peer, not a seller
+AUDIENCE:
+Mixed LinkedIn-active people (founders, coaches, assistants, marketers, operators, creators). Infer role from headline and pick the RIGHT work angle. Never force "automation" onto every role.
 
-FORMAT (IMPORTANT):
-Line 1: "Hey {FirstName},"
-Line 2: (blank line)
-Line 3-4: Short message (2-3 sentences max, casual tone)
+ROLE → WORK ANGLE (strict):
+- Founder / CEO / Owner / Agency → ops bottlenecks, client delivery, scaling without more headcount
+- Coach / Consultant / Creator / Author / Therapist → booking, client follow-up, content ops, onboarding — NOT "are you automating your coaching"
+- Assistant / EA / Ops / Coordinator → inbox, scheduling, reporting, repetitive admin
+- Marketer / Ads / Growth / Sales ops → reporting loops, lead routing, follow-up consistency
+- Finance / Product / Engineering peer → one concrete workflow friction from THEIR domain (reporting, handoffs, tooling) — no fake praise
+- Unclear headline → use the most concrete noun in the headline; ask one practical question about that work
 
-Keep total message under 280 characters including greeting.
+QUESTION STYLES — pick ONE (rotate; do NOT default to "manual vs automated"):
+1) Bottleneck: "Where does most time still disappear in [X]?"
+2) Status: "Is [X] mostly handled, or still a weekly firefight?"
+3) Tradeoff: "When [X] spikes, do you absorb it yourself or hand it off?"
+4) Binary ops (use sparingly, mostly founders/ops/SaaS): "Is [X] still mostly manual on your side?"
 
-TONE: Casual, warm, curious. Like texting a new colleague, not writing a formal email.
+STRUCTURE (max 280 chars total):
+Hey {FirstName},
 
-BAD EXAMPLES (avoid):
-- "Would love to connect and explore synergies"
-- "I came across your profile and was impressed"
-- "Let's schedule a call"
-- "As an HR professional..." (you are NOT HR!)
-- Starting without a greeting
+[1 short hook from THEIR headline — no fluff words] [1 work question from the styles above]
 
-GOOD EXAMPLES:
-- "Hey Sarah,
+HARD BANS:
+- fascinating / impressive / curious / would love to hear / passionate / exciting work
+- synergies / hop on a call / love to connect / always looking to connect
+- Same "manual or automated" ending on every note
+- Inventing company details not in the headline
+- Pitching your AI product
 
-Your work in product strategy is really interesting. I'm building AI tools in a similar space - curious what challenges you're seeing lately?"
+GOOD:
+- "Hey Sara,
+
+Scaling Meta-ad brands usually breaks first on reporting + lead follow-up. Where does most of that time still disappear for you?"
 
 - "Hey Mike,
 
-Love the blend of marketing and automation in your background. Always looking to connect with others in this space!"`
+Coaching + client delivery gets messy at the booking → follow-up handoff. Is that mostly handled for you, or still a weekly firefight?"
 
-  const firstName = lead.name.split(' ')[0]; // Get first name only
+- "Hey Ayesha,
+
+EA days get eaten by inbox + scheduling triage. When that spikes, do you absorb it yourself or hand parts off?"
+
+BAD:
+- Every note ending with "still manual, or have you automated..."
+- "Your work sounds fascinating! I'm curious about trends..."`;
+
+  const firstName = lead.name.split(' ')[0];
   
-  const userPrompt = `Write a connection request for:
-Name: ${firstName} (use first name only in greeting)
-Full Name: ${lead.name}
-Role/Headline: ${lead.headline || 'Professional'}
+  const userPrompt = `Write ONE LinkedIn connection note.
 
-FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
+Name for greeting: ${firstName}
+Full name: ${lead.name}
+Headline/role: ${lead.headline || 'Professional on LinkedIn'}
+
+Infer role → correct work angle → ONE varied question style (not always manual/automated).
+Format:
 Hey ${firstName},
 
-[2-3 casual sentences here]
+[hook + one work question]
 
-Keep it under 280 chars total. Be specific to their role. Do NOT use quotation marks.`;
+Max 280 characters. No quotes. No fluff adjectives. No pitch.`;
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -1248,7 +1261,7 @@ Keep it under 280 chars total. Be specific to their role. Do NOT use quotation m
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
       ],
-      max_tokens: 100,
+      max_tokens: 120,
       temperature: 0.7
     })
   });
