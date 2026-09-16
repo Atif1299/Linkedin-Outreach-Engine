@@ -612,13 +612,512 @@
     });
   }
   
+  // ============================================
+  // MESSAGING REPLY COPILOT
+  // Live DOM hooks (audited): .msg-entity-lockup__entity-title, li.msg-s-message-list__event,
+  // .msg-s-event-listitem__body, .msg-form__contenteditable / aria Write a message…
+  // ============================================
+
+  const LLH_SENDER_NAME = 'Muhammad Atif';
+  const LLH_GOAL_KEY = 'llhReplyGoal';
+  const LLH_GOALS = ['rapport', 'work', 'ask', 'close'];
+  const LLH_GOAL_DEFAULT = 'work';
+  const LLH_GOAL_CHIPS = [
+    { id: 'rapport', label: 'Rapport' },
+    { id: 'work', label: 'Work' },
+    { id: 'ask', label: 'Ask' },
+    { id: 'close', label: 'Close' }
+  ];
+  let llhReplyStack = [];
+  let llhReplyStackIndex = 0;
+  let llhTrackedIdentity = null;
+  let llhCurrentGoal = LLH_GOAL_DEFAULT;
+  let llhSuggestInFlight = false;
+
+  function isMessagingPage() {
+    return /\/messaging\//i.test(location.pathname);
+  }
+
+  function getOpenConversationRoot() {
+    // Prefer the thread that owns the visible compose box (avoids bubble/other-thread bleed)
+    const compose =
+      document.querySelector('.msg-form__contenteditable') ||
+      document.querySelector('div[role="textbox"][aria-label*="Write a message"]');
+    const fromCompose =
+      compose?.closest('.msg-convo-wrapper, .msg-thread, .msg-overlay-conversation-bubble') ||
+      compose?.closest('section, aside, main');
+    if (fromCompose && fromCompose.querySelector('li.msg-s-message-list__event, .msg-s-message-list')) {
+      return fromCompose;
+    }
+
+    const wrappers = [...document.querySelectorAll('.msg-convo-wrapper, .msg-thread, .msg-overlay-conversation-bubble')];
+    const withList = wrappers.find(w => w.querySelector('li.msg-s-message-list__event'));
+    return withList || document.querySelector('main') || document.body;
+  }
+
+  function scrapePeerContext(root) {
+    const scope = root || getOpenConversationRoot();
+    const titleEl =
+      scope.querySelector('h2.msg-entity-lockup__entity-title') ||
+      scope.querySelector('.msg-entity-lockup__entity-title') ||
+      scope.querySelector('a.msg-thread__link-to-profile') ||
+      scope.querySelector('.msg-overlay-bubble-header__title');
+    let name = (titleEl?.textContent || '').replace(/\s+/g, ' ').trim();
+    name = name
+      .replace(/\s*Status is online.*/i, '')
+      .replace(/\s*Active now.*/i, '')
+      .replace(/\s*Open the options list.*/i, '')
+      .trim();
+
+    let headline = '';
+    const infoEl = scope.querySelector('.msg-entity-lockup__entity-info');
+    if (infoEl) {
+      const info = (infoEl.textContent || '').replace(/\s+/g, ' ').trim();
+      if (info && !/status is online|active now|away/i.test(info)) {
+        headline = info;
+      }
+    }
+    if (!headline) {
+      const occ = scope.querySelector(
+        '.msg-entity-lockup__entity-info--occupation, .artdeco-entity-lockup__subtitle, .msg-s-profile-card__occupation'
+      );
+      if (occ) headline = (occ.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+
+    return { peerName: name || 'there', peerHeadline: headline };
+  }
+
+  function scrapeConversationMessages(limit = 10) {
+    const root = getOpenConversationRoot();
+    const list =
+      root.querySelector('.msg-s-message-list, ul.msg-s-message-list-content') || root;
+    const events = [...list.querySelectorAll('li.msg-s-message-list__event')];
+    const messages = [];
+
+    for (const li of events) {
+      // Never take events from a different conversation root
+      if (!root.contains(li)) continue;
+
+      const bodyEl = li.querySelector('.msg-s-event-listitem__body');
+      if (!bodyEl) continue;
+      const text = (bodyEl.innerText || bodyEl.textContent || '').trim();
+      if (!text) continue;
+
+      const nameEl = li.querySelector(
+        '.msg-s-message-group__name, .msg-s-message-group__meta a, a.inline-block'
+      );
+      const sender = (nameEl?.textContent || '').replace(/\s+/g, ' ').trim();
+      const role =
+        sender && new RegExp(LLH_SENDER_NAME.replace(/\s+/g, '\\s+'), 'i').test(sender)
+          ? 'me'
+          : 'them';
+
+      messages.push({ role, text: text.slice(0, 1200), sender });
+    }
+
+    return messages.slice(-limit);
+  }
+
+  function getThreadIdFromDom(root) {
+    const href =
+      (root && root.querySelector?.('a[href*="/messaging/thread/"]')?.getAttribute('href')) ||
+      location.pathname ||
+      '';
+    const m = String(href).match(/\/messaging\/thread\/([^\/\?]+)/i);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  function getConversationIdentity() {
+    const root = getOpenConversationRoot();
+    const { peerName } = scrapePeerContext(root);
+    return {
+      threadId: getThreadIdFromDom(root),
+      peerName: (peerName || '').replace(/\s+/g, ' ').trim()
+    };
+  }
+
+  function identitiesDiffer(a, b) {
+    if (!a || !b) return false;
+    if (a.threadId && b.threadId && a.threadId !== b.threadId) return true;
+    const an = (a.peerName || '').toLowerCase();
+    const bn = (b.peerName || '').toLowerCase();
+    if (!an || !bn || an === 'there' || bn === 'there') return false;
+    return an !== bn;
+  }
+
+  function resetReplyStack() {
+    llhReplyStack = [];
+    llhReplyStackIndex = 0;
+  }
+
+  function closeReplyPanelAndReset() {
+    document.querySelector('.llh-reply-panel')?.remove();
+    resetReplyStack();
+  }
+
+  function closeReplyPanelOnThreadSwitch() {
+    const next = getConversationIdentity();
+    if (!llhTrackedIdentity) {
+      llhTrackedIdentity = next;
+      return;
+    }
+    if (identitiesDiffer(llhTrackedIdentity, next)) {
+      llhTrackedIdentity = next;
+      closeReplyPanelAndReset();
+    } else {
+      llhTrackedIdentity = next;
+    }
+  }
+
+  function getStoredGoal() {
+    return new Promise(resolve => {
+      try {
+        chrome.storage.local.get({ [LLH_GOAL_KEY]: LLH_GOAL_DEFAULT }, data => {
+          const g = data?.[LLH_GOAL_KEY];
+          resolve(LLH_GOALS.includes(g) ? g : LLH_GOAL_DEFAULT);
+        });
+      } catch (e) {
+        resolve(LLH_GOAL_DEFAULT);
+      }
+    });
+  }
+
+  function setStoredGoal(goal) {
+    const value = LLH_GOALS.includes(goal) ? goal : LLH_GOAL_DEFAULT;
+    llhCurrentGoal = value;
+    try {
+      chrome.storage.local.set({ [LLH_GOAL_KEY]: value });
+    } catch (e) { /* ignore */ }
+    return value;
+  }
+
+  function snippetText(text, max = 80) {
+    const s = String(text || '').replace(/\s+/g, ' ').trim();
+    if (s.length <= max) return s;
+    return s.slice(0, max) + '…';
+  }
+
+  function buildContextStripHtml(peerName, messages) {
+    const last2 = (messages || []).slice(-2);
+    const rows = last2.map(m => {
+      const role = m.role === 'me' ? 'You' : (m.sender || peerName || 'Them');
+      return `<div class="llh-context-msg"><span class="llh-context-role">${escapeHtml(role)}</span> ${escapeHtml(snippetText(m.text))}</div>`;
+    }).join('');
+    return `
+      <div class="llh-context-strip">
+        <div class="llh-context-label">Context</div>
+        <div class="llh-context-peer">${escapeHtml(peerName || 'Unknown')}</div>
+        ${rows || '<div class="llh-context-msg">No messages scraped</div>'}
+      </div>`;
+  }
+
+  function buildGoalChipsHtml(selected, disabled) {
+    return `
+      <div class="llh-goal-row">
+        <span class="llh-goal-label">Goal</span>
+        <div class="llh-goal-chips">
+          ${LLH_GOAL_CHIPS.map(g => `
+            <button type="button" class="llh-goal-chip${g.id === selected ? ' active' : ''}" data-goal="${g.id}"${disabled ? ' disabled' : ''}>${g.label}</button>
+          `).join('')}
+        </div>
+      </div>`;
+  }
+
+  function findComposeBox() {
+    const root = getOpenConversationRoot();
+    return (
+      root.querySelector('.msg-form__contenteditable') ||
+      root.querySelector('div[role="textbox"][aria-label*="Write a message"]') ||
+      document.querySelector('.msg-form__contenteditable') ||
+      document.querySelector('div[role="textbox"][aria-label*="Write a message"]')
+    );
+  }
+
+  function insertIntoCompose(text) {
+    const box = findComposeBox();
+    if (!box) return false;
+    box.focus();
+    try {
+      const ok = document.execCommand('selectAll', false, null);
+      if (ok) document.execCommand('insertText', false, text);
+      else {
+        box.textContent = text;
+        box.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+      }
+    } catch (e) {
+      box.textContent = text;
+      box.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    }
+    return true;
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function injectSuggestReplyButton() {
+    if (!isMessagingPage() && !document.querySelector('.msg-overlay-conversation-bubble, .msg-form')) return;
+    if (!document.querySelector('.msg-form, .msg-form__contenteditable')) return;
+
+    // One button per open compose footer (main thread and/or bubble)
+    document.querySelectorAll('form.msg-form, .msg-form').forEach(form => {
+      if (form.querySelector('.llh-suggest-reply-btn')) return;
+      const footer = form.querySelector('.msg-form__footer') || form;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'llh-suggest-reply-btn';
+      btn.textContent = '✨ Suggest reply';
+      btn.title = 'Draft 2 human reply stacks from THIS chat only (you still send)';
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        document.querySelector('.llh-reply-panel')?.remove();
+        resetReplyStack();
+        runSuggestReply(btn);
+      });
+      footer.insertBefore(btn, footer.firstChild);
+    });
+  }
+
+  async function runSuggestReply(btn, goalOverride) {
+    if (llhSuggestInFlight) return;
+    llhSuggestInFlight = true;
+
+    const original = btn ? btn.textContent : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Drafting...';
+    }
+
+    const meta = { peerName: '', peerHeadline: '', messages: [], goal: LLH_GOAL_DEFAULT };
+    let identityAtStart = null;
+
+    try {
+      if (!chrome.runtime?.id) {
+        throw new Error('Extension was reloaded. Refresh this page (F5).');
+      }
+
+      const root = getOpenConversationRoot();
+      const { peerName, peerHeadline } = scrapePeerContext(root);
+      const messages = scrapeConversationMessages(10);
+      const goal = LLH_GOALS.includes(goalOverride) ? setStoredGoal(goalOverride) : await getStoredGoal();
+      llhCurrentGoal = goal;
+      llhTrackedIdentity = getConversationIdentity();
+      identityAtStart = llhTrackedIdentity;
+
+      meta.peerName = peerName;
+      meta.peerHeadline = peerHeadline;
+      meta.messages = messages;
+      meta.goal = goal;
+
+      if (!messages.length) {
+        throw new Error('No messages found in this conversation yet.');
+      }
+
+      // Guard: them-senders should match open peer (catches cross-thread bleed)
+      const themSenders = [...new Set(messages.filter(m => m.role === 'them').map(m => m.sender).filter(Boolean))];
+      const peerKey = peerName.toLowerCase().split(/\s+/)[0];
+      if (peerKey && themSenders.length) {
+        const mismatch = themSenders.every(s => !s.toLowerCase().includes(peerKey) && !peerName.toLowerCase().includes(s.toLowerCase().split(/\s+/)[0]));
+        if (mismatch) {
+          throw new Error('Thread mismatch — reopen this chat and try Suggest reply again.');
+        }
+      }
+
+      showReplyDraftPanel({ loading: true }, meta);
+
+      const response = await chrome.runtime.sendMessage({
+        action: 'suggestReplyDrafts',
+        payload: {
+          peerName,
+          peerHeadline,
+          messages,
+          senderName: LLH_SENDER_NAME,
+          goal
+        }
+      });
+
+      if (identitiesDiffer(identityAtStart, getConversationIdentity())) {
+        return;
+      }
+
+      if (response?.error) throw new Error(response.error);
+      if (!response?.options?.length) throw new Error('No drafts returned');
+
+      showReplyDraftPanel(response, meta);
+    } catch (error) {
+      if (identityAtStart && identitiesDiffer(identityAtStart, getConversationIdentity())) {
+        return;
+      }
+      showReplyDraftPanel({ error: error.message || 'Failed' }, meta);
+    } finally {
+      llhSuggestInFlight = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = original || '✨ Suggest reply';
+      }
+    }
+  }
+
+  function showReplyDraftPanel(result, meta) {
+    document.querySelector('.llh-reply-panel')?.remove();
+
+    const panel = document.createElement('div');
+    panel.className = 'llh-reply-panel';
+    const goal = LLH_GOALS.includes(meta?.goal) ? meta.goal : llhCurrentGoal;
+    const stage = result.stage || '';
+    const loading = !!result.loading;
+    const contextHtml = buildContextStripHtml(meta?.peerName, meta?.messages);
+    const chipsHtml = buildGoalChipsHtml(goal, loading);
+
+    let bodyHtml = '';
+    if (result.error) {
+      bodyHtml = `<p class="llh-reply-error">${escapeHtml(result.error)}</p>`;
+    } else if (loading) {
+      bodyHtml = `<p class="llh-reply-loading">Drafting…</p>`;
+    } else {
+      bodyHtml = result.options.map((opt) => {
+        const pathHint = opt.id === 'B' ? 'warmer' : 'clearer path';
+        const msgs = (opt.messages || []).map((m, i) => `
+          <div class="llh-reply-bubble" data-opt="${opt.id}" data-idx="${i}">
+            <div class="llh-reply-bubble-label">Msg ${i + 1}</div>
+            <div class="llh-reply-bubble-text">${escapeHtml(m)}</div>
+            <div class="llh-reply-bubble-actions">
+              <button type="button" class="llh-reply-copy" data-opt="${opt.id}" data-idx="${i}">Copy</button>
+              <button type="button" class="llh-reply-insert" data-opt="${opt.id}" data-idx="${i}">Insert</button>
+            </div>
+          </div>`).join('');
+        return `
+          <div class="llh-reply-option" data-opt="${opt.id}">
+            <div class="llh-reply-option-header">
+              <strong>Option ${opt.id} <span class="llh-reply-option-sub">· ${pathHint}</span></strong>
+              <button type="button" class="llh-reply-use-stack" data-opt="${opt.id}">Use stack</button>
+            </div>
+            ${msgs}
+          </div>`;
+      }).join('');
+    }
+
+    panel.innerHTML = `
+      <div class="llh-reply-panel-header">
+        <h3>Suggest reply ${meta?.peerName ? `· ${escapeHtml(meta.peerName)}` : ''}</h3>
+        <button type="button" class="llh-close-btn">×</button>
+      </div>
+      ${contextHtml}
+      ${chipsHtml}
+      <div class="llh-reply-panel-meta">
+        ${stage ? `<span class="llh-reply-stage">Stage: ${escapeHtml(stage)}</span>` : ''}
+        <span class="llh-reply-goal">Goal: ${escapeHtml(goal)}</span>
+        ${meta?.peerHeadline ? `<span class="llh-reply-headline">${escapeHtml(meta.peerHeadline)}</span>` : ''}
+        <span class="llh-reply-hint">You send manually — never auto-send</span>
+      </div>
+      <div class="llh-reply-panel-body">${bodyHtml}</div>
+      <div class="llh-reply-panel-footer">
+        <button type="button" class="llh-reply-copy-next" disabled>Copy next</button>
+        <span class="llh-reply-stack-status"></span>
+      </div>`;
+
+    document.body.appendChild(panel);
+    panel.querySelector('.llh-close-btn').onclick = () => {
+      panel.remove();
+      resetReplyStack();
+    };
+
+    panel.querySelectorAll('.llh-goal-chip').forEach(chip => {
+      chip.addEventListener('click', async () => {
+        const next = chip.dataset.goal;
+        if (!LLH_GOALS.includes(next) || next === goal || loading) return;
+        setStoredGoal(next);
+        const suggestBtn = document.querySelector('.llh-suggest-reply-btn');
+        runSuggestReply(suggestBtn, next);
+      });
+    });
+
+    if (result.error || loading) return;
+
+    const findMsg = (optId, idx) => {
+      const opt = result.options.find(o => o.id === optId);
+      return opt?.messages?.[Number(idx)] || '';
+    };
+
+    panel.querySelectorAll('.llh-reply-copy').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const text = findMsg(btn.dataset.opt, btn.dataset.idx);
+        const ok = await copyText(text);
+        btn.textContent = ok ? 'Copied' : 'Fail';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+      });
+    });
+
+    panel.querySelectorAll('.llh-reply-insert').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const text = findMsg(btn.dataset.opt, btn.dataset.idx);
+        const ok = insertIntoCompose(text);
+        btn.textContent = ok ? 'Inserted' : 'No box';
+        setTimeout(() => { btn.textContent = 'Insert'; }, 1200);
+      });
+    });
+
+    const copyNextBtn = panel.querySelector('.llh-reply-copy-next');
+    const statusEl = panel.querySelector('.llh-reply-stack-status');
+
+    panel.querySelectorAll('.llh-reply-use-stack').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const opt = result.options.find(o => o.id === btn.dataset.opt);
+        llhReplyStack = opt?.messages || [];
+        llhReplyStackIndex = 0;
+        copyNextBtn.disabled = llhReplyStack.length === 0;
+        statusEl.textContent = `Stack ${btn.dataset.opt}: 0/${llhReplyStack.length} — click Copy next`;
+        panel.querySelectorAll('.llh-reply-option').forEach(el => {
+          el.classList.toggle('active', el.dataset.opt === btn.dataset.opt);
+        });
+      });
+    });
+
+    copyNextBtn.addEventListener('click', async () => {
+      if (!llhReplyStack.length || llhReplyStackIndex >= llhReplyStack.length) return;
+      const text = llhReplyStack[llhReplyStackIndex];
+      await copyText(text);
+      insertIntoCompose(text);
+      llhReplyStackIndex++;
+      statusEl.textContent =
+        llhReplyStackIndex >= llhReplyStack.length
+          ? `Done — sent stack manually (${llhReplyStack.length} msgs)`
+          : `Copied ${llhReplyStackIndex}/${llhReplyStack.length} — paste/send, then Copy next`;
+      if (llhReplyStackIndex >= llhReplyStack.length) copyNextBtn.disabled = true;
+    });
+  }
+
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+  
   const observer = new MutationObserver(() => {
     clearTimeout(window.llhInjectTimeout);
-    window.llhInjectTimeout = setTimeout(injectExtractButton, 500);
+    window.llhInjectTimeout = setTimeout(() => {
+      injectExtractButton();
+      injectSuggestReplyButton();
+      closeReplyPanelOnThreadSwitch();
+    }, 500);
   });
   
   observer.observe(document.body, { childList: true, subtree: true });
-  setTimeout(injectExtractButton, 1000);
+  setTimeout(() => {
+    injectExtractButton();
+    injectSuggestReplyButton();
+    closeReplyPanelOnThreadSwitch();
+  }, 1000);
+  window.addEventListener('popstate', closeReplyPanelOnThreadSwitch);
+  setInterval(closeReplyPanelOnThreadSwitch, 800);
   
   let scrollTimeout;
   window.addEventListener('scroll', () => {
@@ -626,5 +1125,5 @@
     scrollTimeout = setTimeout(injectExtractButton, 300);
   }, { passive: true });
   
-  console.log('LinkedIn Lead Harvester content script loaded (2026 DOM)');
+  console.log('LinkedIn Lead Harvester content script loaded (2026 DOM + messaging copilot)');
 })();
