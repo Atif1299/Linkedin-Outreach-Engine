@@ -37,6 +37,7 @@ Automated lead extraction from LinkedIn posts. Save engagers to Google Sheets an
 3. Enter campaign name
 4. Click **💾 Save to Google Sheets** or **🤖 Generate & Save**
 5. Open the extension popup → choose a campaign → start Auto-Send
+6. In LinkedIn Messaging, open a chat → **✨ Suggest reply** for 2 human message stacks (Copy / Insert — you still send). Pick a goal chip (**Rapport** / **Work** / **Ask** / **Close**; last choice is remembered). **Work** is the default.
 
 ## 📁 Project Structure
 
