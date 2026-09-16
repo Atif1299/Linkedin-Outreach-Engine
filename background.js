@@ -100,6 +100,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .catch(error => sendResponse({ error: error.message }));
     return true;
   }
+
+  if (request.action === "suggestReplyDrafts") {
+    handleSuggestReplyDrafts(request.payload)
+      .then(sendResponse)
+      .catch(error => sendResponse({ error: error.message }));
+    return true;
+  }
 });
 
 // ============================================
@@ -579,7 +586,7 @@ async function sendConnectionRequest(lead) {
   } catch (error) {
     const msg = String(error?.message || error).toLowerCase();
     if (!msg.includes('cannot be edited') && !msg.includes('dragging')) {
-      console.error('LLH: Send error:', error);
+    console.error('LLH: Send error:', error);
     }
     await closeTabSafe();
     return { success: false, error: error.message };
@@ -720,8 +727,8 @@ function clickMoreDropdown() {
     }) || candidates[0];
 
   if (!moreBtn) return { clicked: false, error: 'More button not found' };
-  moreBtn.click();
-  return { clicked: true };
+    moreBtn.click();
+    return { clicked: true };
 }
 
 function clickConnectFromDropdown() {
@@ -1177,6 +1184,242 @@ async function ensureSheetExists(spreadsheetId, sheetName, token) {
       }
     );
   }
+}
+
+async function callOpenAiReplyDrafts(apiKey, systemPrompt, userPrompt) {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      max_tokens: 700,
+      temperature: 0.7,
+      response_format: { type: 'json_object' }
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw new Error('Failed to draft replies' + (errText ? `: ${errText.slice(0, 120)}` : ''));
+  }
+
+  const data = await response.json();
+  return data.choices[0]?.message?.content?.trim() || '';
+}
+
+function isOnlyCounterQuestion(text) {
+  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return true;
+  if (!t.includes('?')) return false;
+  const sentences = t.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
+  const statements = sentences.filter(s => !s.includes('?'));
+  return !statements.some(s => s.replace(/[^a-zA-Z0-9]/g, '').length >= 12);
+}
+
+function draftsAnswerQuestion(options) {
+  if (!options?.length) return false;
+  return options.every(opt => {
+    const first = opt.messages?.[0];
+    return first && !isOnlyCounterQuestion(first);
+  });
+}
+
+function buildSuggestReplySystemPrompt(goal) {
+  return `You draft LinkedIn chat replies for Muhammad Atif.
+
+NORTH STAR — every conversation should move, gradually, toward one of:
+1. Time-waste discovery — what eats their time / ops bottleneck that AI or automation can help
+2. Collab / swap notes — peer exchange on a real problem they already named
+3. Soft meeting — a short call only when stage is warm AND they are open
+
+Never force an AI pitch on declined. Never skip answering their direct question.
+
+SENDER:
+- Muhammad Atif — Lead AI Product Architect @ Schmoozzer
+- Builds AI agents, LLM systems, business automation
+- Voice: short, concrete, peer. Like a smart operator — not a coach, closer, or cheerleader.
+
+GOAL (user-picked — follow strictly): ${goal}
+- rapport: Human only; no meeting; light curiosity. No AI pitch. No CTA.
+- work: Answer first if they asked. Surface time-waste / bottleneck in THEIR world. Soft bridge to how AI/systems help — no hard CTA, no meeting ask.
+- ask: Same as work, plus ONE soft CTA if natural: swap notes / 15-min compare / intro.
+- close: Graceful exit; no AI pitch; no meeting.
+
+TASK:
+1) Classify stage: early | mid | warm | cooling | declined
+2) Return exactly 2 options (A and B), each a STACK of 2–3 short messages he sends one-by-one.
+
+DECLINED (narrow — do NOT overuse):
+ONLY if they clearly refuse AI / tech / his offer / further pitch, e.g. "completely out from the AI field", "not interested in AI", "don't pitch me".
+NOT declined when they:
+- won't promise intros (that's a boundary, conversation continues)
+- share a newsletter / ask coaching questions
+- engage warmly about career/positioning
+Those are mid or warm.
+
+STAGE RULES:
+- early: acknowledge + one specific work question. NO meeting ask.
+- mid: answer their question / react + light bridge toward the north star, per GOAL.
+- warm: answer fully; GOAL=ask may include a soft CTA; GOAL=work stays no hard CTA.
+- cooling: short human close / light reopen. No hard push.
+- declined: topic refusal only — respect it; no AI pitch; no meeting.
+
+ANSWER FIRST:
+If their LAST message contains a question mark, Bubble 1 of EVERY option MUST answer it with a concrete statement.
+Bubble 1 must NOT be only a counter-question (e.g. do not reply with just "What's your biggest challenge?").
+Example: if they ask "magic wand / 6 months from now what would that look like?" → describe the outcome, then optionally follow up.
+
+STACK RULES:
+- Default 2 bubbles; 3 only if mid/warm and natural.
+- Bubble 1 = answer / react to THEIR last line (question → answer).
+- Msg 2 MUST add new information OR a real ask — never filler ("makes sense", "got it", "appreciate that").
+- Match their length/energy. Under ~280 chars per bubble.
+- Option A = clearer direct path to the GOAL. Option B = warmer variant. Both still toward the north star when goal is work or ask.
+
+BANNED FLUFF:
+"I appreciate that", "truly unique", "wishing you the best", "fascinating", "synergies", "would love to connect", "that's amazing", "great question"
+
+Ban when declined: AI pitch / meeting about AI.
+Ban cross-thread topics that do not appear in THIS chat.
+
+OUTPUT: strict JSON only, no markdown:
+{"stage":"early|mid|warm|cooling|declined","options":[{"id":"A","messages":["...","..."]},{"id":"B","messages":["...","..."]}]}`;
+}
+
+async function handleSuggestReplyDrafts(payload = {}) {
+  const settings = await chrome.storage.local.get(['openaiApiKey']);
+  if (!settings.openaiApiKey) {
+    throw new Error('Please set your OpenAI API key in settings');
+  }
+
+  const peerName = sanitizeText(payload.peerName || 'there');
+  const peerHeadline = sanitizeText(payload.peerHeadline || '');
+  const senderName = sanitizeText(payload.senderName || 'Muhammad Atif');
+  const goal = ['rapport', 'work', 'ask', 'close'].includes(payload.goal) ? payload.goal : 'work';
+  const messages = Array.isArray(payload.messages) ? payload.messages.slice(-10) : [];
+
+  if (!messages.length) {
+    throw new Error('No conversation messages to draft from');
+  }
+
+  const threadLines = messages.map(m => {
+    const who = m.role === 'me' ? senderName : (sanitizeText(m.sender) || peerName);
+    return `${who}: ${sanitizeText(m.text || '')}`;
+  }).join('\n\n');
+
+  const lastThem = [...messages].reverse().find(m => m.role === 'them');
+  const needsAnswer = /\?/.test(String(lastThem?.text || ''));
+
+  const systemPrompt = buildSuggestReplySystemPrompt(goal);
+  const userPrompt = `Peer name: ${peerName}
+Peer headline: ${peerHeadline || '(not visible)'}
+Sender: ${senderName}
+Goal: ${goal}
+
+Thread (oldest → newest) — THIS conversation only with ${peerName}:
+${threadLines}
+
+Weight their LAST message heaviest.
+- Draft ONLY for ${peerName}. Do not invent logistics/retirement/AI-refusal topics unless they appear in THIS thread.
+- If their last message contains a question → answer it in msg 1 of every option. Do not reply with only a counter-question.
+- Msg 2 must add new info or a real ask.
+- Use stage=declined ONLY for clear AI/topic refusal — NOT for "I won't promise intros" or coaching questions.
+- Option A = clearer path to goal "${goal}". Option B = warmer variant.
+
+Return JSON with stage + options A/B as message stacks.`;
+
+  const raw = await callOpenAiReplyDrafts(settings.openaiApiKey, systemPrompt, userPrompt);
+  let result = normalizeSuggestReplyDrafts(raw, messages, goal);
+
+  if (needsAnswer && !draftsAnswerQuestion(result.options)) {
+    const repairPrompt = `${userPrompt}
+
+REPAIR: Their last message contains a question. Msg 1 of EVERY option MUST answer it with a concrete statement first. Do NOT reply with only a counter-question.`;
+    const repairedRaw = await callOpenAiReplyDrafts(settings.openaiApiKey, systemPrompt, repairPrompt);
+    result = normalizeSuggestReplyDrafts(repairedRaw, messages, goal);
+    if (!draftsAnswerQuestion(result.options)) {
+      throw new Error("Draft didn't answer their question — try again");
+    }
+  }
+
+  return result;
+}
+
+function normalizeSuggestReplyDrafts(raw, threadMessages = [], goal = 'work') {
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('Draft model returned invalid JSON');
+    parsed = JSON.parse(match[0]);
+  }
+
+  const stage = String(parsed.stage || '').toLowerCase();
+  let validStage = ['early', 'mid', 'warm', 'cooling', 'declined'].includes(stage) ? stage : 'mid';
+  const validGoal = ['rapport', 'work', 'ask', 'close'].includes(goal) ? goal : 'work';
+
+  let options = Array.isArray(parsed.options) ? parsed.options : [];
+  options = options.slice(0, 2).map((opt, i) => {
+    const id = opt.id === 'B' || i === 1 ? 'B' : 'A';
+    let messages = Array.isArray(opt.messages) ? opt.messages : [];
+    messages = messages
+      .map(m => String(m || '').replace(/^["']|["']$/g, '').trim())
+      .filter(Boolean)
+      .map(m => m.slice(0, 300))
+      .slice(0, 3);
+    return { id, messages };
+  }).filter(o => o.messages.length > 0);
+
+  if (options.length === 0) {
+    throw new Error('No usable reply options in model output');
+  }
+
+  if (options.length === 1) {
+    options[0].id = 'A';
+  } else {
+    options[0].id = 'A';
+    options[1].id = 'B';
+  }
+
+  const lastThem = [...threadMessages].reverse().find(m => m.role === 'them');
+  const lastText = String(lastThem?.text || '').toLowerCase();
+
+  // Topic refusal only — NOT intro boundaries / coaching questions
+  const topicDeclined = /out (of|from) the ai(?:\s+field)?|not (into|in|interested in) ai|don't (do|want) ai|dont (do|want) ai|outside (of )?the ai field|no interest in ai|stop (pitching|pushing) ai/i.test(lastText);
+  const askedQuestion = /\?/.test(String(lastThem?.text || ''));
+  const softBoundaryOnly = /never want to promise|won't promise|dont want to promise|don't want to promise|keep you in mind|newsletter/i.test(lastText) && !topicDeclined;
+
+  if (topicDeclined) {
+    validStage = 'declined';
+  } else if (validStage === 'declined' || softBoundaryOnly) {
+    // Model over-tagged declined (e.g. intro boundary) — keep conversation going
+    validStage = askedQuestion ? 'warm' : 'mid';
+  }
+
+  if (topicDeclined) {
+    const aiPush = /\bAI\b|artificial intelligence|automation|agentic|machine learning|\bLLM\b|compare notes on how AI|reshaping.*AI|AI might|AI field/i;
+    options = options.map(opt => {
+      const cleaned = opt.messages.filter(m => !aiPush.test(m));
+      if (cleaned.length >= 1) return { ...opt, messages: cleaned };
+      return {
+        ...opt,
+        messages: [
+          'Totally fair — thanks for saying that clearly.',
+          'Appreciate you sharing your story either way.'
+        ]
+      };
+    });
+  }
+
+  return { stage: validStage, goal: validGoal, options };
 }
 
 async function generatePersonalizedMessage(lead, apiKey) {
