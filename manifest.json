@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LinkedIn Lead Harvester",
-  "version": "1.2.8",
+  "version": "1.3.0",
   "description": "Extract leads from LinkedIn post engagers, save to Google Sheets, and auto-send connection requests",
   "permissions": [
     "storage",
